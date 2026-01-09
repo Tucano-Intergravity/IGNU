@@ -10,6 +10,7 @@
  * Include Files
  *============================================================================*/
 #include "../Inc/TMTC.h"
+#include "../Inc/ignu_task.h"
 #include "../../OPU/opu_task.h" // For SendToCom1
 #include "xil_printf.h"
 
@@ -195,9 +196,11 @@ SInt32 CspSend(UInt8 dest, UInt8 dport, UInt8 *pData, UInt32 uiLen)
     uiPktLen += uiLen;
 
     /* 3. CRC32 */
-    /* CRC Calculation: Payload ONLY (Exclude Header) */
-    /* ucRawPkt[0..3] is Header. Payload starts at ucRawPkt[4] */
-    UInt32 uiCrc = Crc32Check(&ucRawPkt[CSP_HEADER_SIZE], uiLen); // uiLen is Payload Length
+    /* Checksum: Calculate over Header + Payload (Standard CSP) */
+    /* If PDHS expects Payload Only, uncomment the next line and comment out the standard one */
+    // UInt32 uiCrc = Crc32Check(&ucRawPkt[CSP_HEADER_SIZE], uiLen); // Payload Only
+    UInt32 uiCrc = Crc32Check(ucRawPkt, uiPktLen); // Header + Payload
+
     ucRawPkt[uiPktLen++] = (uiCrc >> 24) & 0xFF;
     ucRawPkt[uiPktLen++] = (uiCrc >> 16) & 0xFF;
     ucRawPkt[uiPktLen++] = (uiCrc >> 8) & 0xFF;
@@ -297,7 +300,7 @@ SInt32 CspReceive(UInt8 *pPacket, SInt32 siLen)
                        (pPacket[siLen-2] << 8) | pPacket[siLen-1];
 
     if (uiCalcCrc != uiRecvCrc) {
-        xil_printf("[CSP] Error: CRC Mismatch (Calc: 0x%08X, Recv: 0x%08X)\r\n", uiCalcCrc, uiRecvCrc);
+        xil_printf("[CSP] Error: CRC Mismatch\r\n");
         return -2;
     }
 
@@ -360,10 +363,12 @@ static void CcsdsReceive(UInt8 *pCcsdsPacket, UInt32 uiLen)
 
 static void ProcTestStart(void) {
     xil_printf("[CMD] Start Test\r\n");
+    SetIgnuState(IGNU_STATE_RUN);
     SendResponse(PUS_SVC_TEST, PUS_SUB_TEST_START, TM_ACK_VALID);
 }
 static void ProcTestStop(void) {
     xil_printf("[CMD] Stop Test\r\n");
+    SetIgnuState(IGNU_STATE_IDLE);
     SendResponse(PUS_SVC_TEST, PUS_SUB_TEST_STOP, TM_ACK_VALID);
 }
 static void ProcSetTestParam(void) {

@@ -25,6 +25,7 @@ QueueHandle_t xCom1DataQueue = NULL;
 /*==============================================================================
  * Local Variables
  *============================================================================*/
+static IgnuState_t eCurrentState = IGNU_STATE_IDLE;
 
 /*==============================================================================
  * Local Function Declarations
@@ -33,6 +34,17 @@ QueueHandle_t xCom1DataQueue = NULL;
 /*==============================================================================
  * Functions
  *============================================================================*/
+
+void SetIgnuState(IgnuState_t eState)
+{
+    eCurrentState = eState;
+    xil_printf("[IGNU] State Changed: %s\r\n", (eState == IGNU_STATE_RUN) ? "RUN" : "IDLE");
+}
+
+IgnuState_t GetIgnuState(void)
+{
+    return eCurrentState;
+}
 
 /**
  * @fn IgnuTask
@@ -51,6 +63,8 @@ void IgnuTask( void *pvParameters )
     static UInt8 ucDecodedPacket[MAX_KISS_BUF]; 
 
     /* Initialization */
+    static int iLoopCnt = 0; // For periodic status log
+
     /* Create IMU Data Queue (Size: 10, Item Size: size of sRbData structure) */
     xImuDataQueue = xQueueCreate( 10, sizeof(sRbData) );
     if( xImuDataQueue == NULL )
@@ -76,31 +90,7 @@ void IgnuTask( void *pvParameters )
 
     while(1)
     {
-        /* Receive IMU Data (Queue) */
-        if( xImuDataQueue != NULL )
-        {
-            /* Receive data from queue (Wait time 0 = Non-blocking) */
-            if( xQueueReceive( xImuDataQueue, &stImuData, 0 ) == pdTRUE )
-            {
-                /* TODO: Process received IMU data */
-                TickType_t xCurrentTick = xTaskGetTickCount();
-                // xil_printf("[%u] [IGNU] IMU Data Received! Size: %d\r\n", xCurrentTick, stImuData.usSize);
-            }
-        }
-
-        /* Receive GPS Data (Queue) */
-        if( xGpsDataQueue != NULL )
-        {
-            /* Receive data from queue (Wait time 0 = Non-blocking) */
-            if( xQueueReceive( xGpsDataQueue, &stGpsData, 0 ) == pdTRUE )
-            {
-                /* TODO: Process received GPS data */
-                TickType_t xCurrentTick = xTaskGetTickCount();
-                // xil_printf("[%u] [IGNU] GPS Data Received! Size: %d, Counter: %d\r\n", xCurrentTick, stGpsData.usSize, stGpsData.ucData[stGpsData.usSize-1]);
-            }
-        }
-
-        /* Receive COM1 Data (Queue) */
+        /* 1. Receive COM1 Data (Queue) - Always process Commands */
         if( xCom1DataQueue != NULL )
         {
             /* Receive data from queue (Wait time 0 = Non-blocking) */
@@ -134,9 +124,51 @@ void IgnuTask( void *pvParameters )
             }
         }
 
-        /* TODO: Implement GPS, IMU Data Processing */
-        
-        /* TODO: Implement TM/TC Processing */
+        /* 2. State Machine */
+        switch (eCurrentState)
+        {
+        case IGNU_STATE_IDLE:
+            /* Idle State: Drain Sensor Queues but don't process/send */
+            if( xImuDataQueue != NULL ) xQueueReceive( xImuDataQueue, &stImuData, 0 );
+            if( xGpsDataQueue != NULL ) xQueueReceive( xGpsDataQueue, &stGpsData, 0 );
+            break;
+
+        case IGNU_STATE_RUN:
+            /* Run State: Process Sensor Data */
+            
+            /* Receive IMU Data (Queue) */
+            if( xImuDataQueue != NULL )
+            {
+                /* Receive data from queue (Wait time 0 = Non-blocking) */
+                if( xQueueReceive( xImuDataQueue, &stImuData, 0 ) == pdTRUE )
+                {
+                    /* TODO: Process received IMU data */
+                    TickType_t xCurrentTick = xTaskGetTickCount();
+                    // xil_printf("[%u] [IGNU] IMU Data Received! Size: %d\r\n", xCurrentTick, stImuData.usSize);
+                }
+            }
+
+            /* Receive GPS Data (Queue) */
+            if( xGpsDataQueue != NULL )
+            {
+                /* Receive data from queue (Wait time 0 = Non-blocking) */
+                if( xQueueReceive( xGpsDataQueue, &stGpsData, 0 ) == pdTRUE )
+                {
+                    /* TODO: Process received GPS data */
+                    TickType_t xCurrentTick = xTaskGetTickCount();
+                    // xil_printf("[%u] [IGNU] GPS Data Received! Size: %d, Counter: %d\r\n", xCurrentTick, stGpsData.usSize, stGpsData.ucData[stGpsData.usSize-1]);
+                }
+            }
+            break;
+        }
+
+        /* 3. Periodic Status Log (Every 1 sec) */
+        iLoopCnt++;
+        if (iLoopCnt >= 100)
+        {
+            iLoopCnt = 0;
+            xil_printf("[IGNU] Status: %s\r\n", (eCurrentState == IGNU_STATE_RUN) ? "RUN" : "IDLE");
+        }
 
         vTaskDelay( x10ms );
     }

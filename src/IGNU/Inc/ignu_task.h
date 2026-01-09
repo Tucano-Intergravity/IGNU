@@ -28,8 +28,18 @@ extern QueueHandle_t xGpsDataQueue;
 extern QueueHandle_t xCom1DataQueue;
 
 /*==============================================================================
+ * Type Definition
+ *============================================================================*/
+typedef enum {
+    IGNU_STATE_IDLE,
+    IGNU_STATE_RUN
+} IgnuState_t;
+
+/*==============================================================================
  * Gloabal Function Declarations
  *============================================================================*/
 void IgnuTask( void *pvParameters );
+void SetIgnuState(IgnuState_t eState);
+IgnuState_t GetIgnuState(void);
 
 #endif /* __IGNU_TASK_H__ */
