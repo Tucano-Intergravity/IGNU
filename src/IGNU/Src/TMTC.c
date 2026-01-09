@@ -2,7 +2,7 @@
  * @file TMTC.c
  * @author Sebum Chun (sebum.chun@intergravity.tech)
  * @brief Telemetry & Telecommand Processing Source File (KISS, CSP, CCSDS)
- * @version 1.3.0 (Fix: R06.6 Compliance - 12B Header, 4B Response)
+ * @version 1.4.0 (Add: Periodic Test Data Transmission)
  * @date 2026-01-09
  */
 
@@ -308,9 +308,15 @@ SInt32 CspReceive(UInt8 *pPacket, SInt32 siLen)
     UInt8 dest = (uiHeaderVal >> 25) & 0x1F;
     UInt8 dport = (uiHeaderVal >> 14) & 0x3F;
 
-    if (dest != CSP_MY_ADDR) return -3;
+    if (dest != CSP_MY_ADDR) {
+        xil_printf("[CSP] Warning: Wrong Dest Addr %d (Expected %d)\r\n", dest, CSP_MY_ADDR);
+        return -3;
+    }
 
     if (dport == CSP_PORT_CMD_RX) {
+        UInt8 src = (uiHeaderVal >> 20) & 0x1F;
+        TickType_t xCurrentTick = xTaskGetTickCount();
+        xil_printf("[%u] [CSP] Valid Packet (Src:%d DPort:%d Len:%d)\r\n", xCurrentTick, src, dport, siLen);
         CcsdsReceive(&pPacket[CSP_HEADER_SIZE], uiPayloadLen - CSP_HEADER_SIZE);
     }
     return 0;
@@ -390,16 +396,63 @@ static void ProcPing(void) {
 
 static void ProcReqTestData(UInt8 ucType) {
     xil_printf("[CMD] Req Test Data %d\r\n", ucType);
-    UInt8 ucDummy[16];
-    memset(ucDummy, 0xAA, 16);
-    /* Svc 1, Sub ucType, Data 16 bytes */
-    SendCcsdsTm(PUS_SVC_TEST, ucType, ucDummy, 16);
+    /* For ReqTestData command, we can send a single packet */
+    SendTestData();
 }
 
 static void ProcHkReq(void) {
     xil_printf("[CMD] HK Req\r\n");
-    UInt8 ucDummy[4];
-    memset(ucDummy, 0x55, 4);
-    /* Svc 5, Sub 1, Data 4 bytes */
-    SendCcsdsTm(PUS_SVC_HK, 1, ucDummy, 4);
+    
+    PayloadStatus_t stStatus;
+    memset(&stStatus, 0, sizeof(PayloadStatus_t));
+
+    /* Mock Data Filling */
+    stStatus.boardTemp = 255; // 25.5 C
+    
+    /* Reflect Current State */
+    if (GetIgnuState() == IGNU_STATE_RUN) {
+        stStatus.payloadStatus = 1; // Testing
+    } else {
+        stStatus.payloadStatus = 0; // Idle
+    }
+    
+    stStatus.imuStatus = 0;
+    stStatus.gpsStatus = 0;
+    stStatus.gpsTrackStatus = 0;
+
+    /* Svc 5, Sub 1, Data 8 bytes */
+    SendCcsdsTm(PUS_SVC_HK, 1, (UInt8*)&stStatus, sizeof(PayloadStatus_t));
+}
+
+/* ============================================================================
+ * Send Test Data (1Hz Periodic Telemetry)
+ * Service: 1, Subtype: 10
+ * ============================================================================ */
+void SendTestData(void)
+{
+    static TestData_t stTestData;
+    static UInt32 uiCounter = 0;
+
+    /* Initialize with zeroes first */
+    memset(&stTestData, 0, sizeof(TestData_t));
+
+    /* Mock Data Generation */
+    uiCounter++;
+    stTestData.gpsTime = uiCounter; // Just count up seconds
+    stTestData.gpsWeek = 2200;
+    stTestData.lat = 37.123456;
+    stTestData.lon = 127.123456;
+    stTestData.alt = 100.0f + (float)(uiCounter % 10);
+    
+    stTestData.meanGyroX = 0.1f * (uiCounter % 5);
+    stTestData.meanGyroY = 0.2f * (uiCounter % 5);
+    stTestData.meanGyroZ = 0.3f * (uiCounter % 5);
+    
+    stTestData.roll = 1.0f;
+    stTestData.pitch = 2.0f;
+    stTestData.yaw = 3.0f;
+
+    /* Send Telemetry */
+    /* Service 1, Subtype 10 (PUS_SUB_TEST_REQ_DATA or PUS_SUB_TEST_DATA_MIN) */
+    SendCcsdsTm(PUS_SVC_TEST, PUS_SUB_TEST_REQ_DATA, (UInt8*)&stTestData, sizeof(TestData_t));
 }

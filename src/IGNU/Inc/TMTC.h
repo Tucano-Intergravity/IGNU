@@ -79,6 +79,68 @@ typedef struct {
     UInt8 flags;
 } csp_header_t;
 
+/* ============================================================================
+ * 6.2.1 Payload Status Telemetry (Reply Status)
+ * Service: 5, Subtype: 1
+ * Total Size: 8 Bytes (Previously 6 Bytes)
+ * ============================================================================ */
+typedef struct {
+    UInt8  payloadStatus;   // Offset: 0, 8 bits (0=Idle, 1=Testing, ...)
+    UInt8  _reserved1;      // Offset: 1, 8 bits (Padding for alignment)
+
+    SInt16  boardTemp;       // Offset: 2, 16 bits (Unit: 0.1 degC, Little Endian)
+
+    UInt8  imuStatus;       // Offset: 4, 8 bits (0=Normal, 1=Fault)
+    UInt8  gpsStatus;       // Offset: 5, 8 bits (0=Normal, 1=Fault)
+    UInt8  gpsTrackStatus;  // Offset: 6, 8 bits (GPS tracking status code)
+
+    UInt8  _reserved2;      // Offset: 7, 8 bits (Padding to match 4/8 byte alignment)
+} PayloadStatus_t;
+
+
+/* ============================================================================
+ * 6.2.2 Test Data Telemetry (Reply Test Data)
+ * Service: 1, Subtype: 10
+ * Total Size: 100 Bytes (Modified for Alignment)
+ * ============================================================================ */
+typedef struct {
+    /* GPS Time Information */
+    UInt32 gpsWeek;         // Offset: 0, 32 bits (Modified from 16 bits)
+    UInt32 gpsTime;         // Offset: 4, 32 bits (Unit: sec, Little Endian)
+
+    /* Position (8-byte aligned) */
+    double   lat;             // Offset: 8,  64 bits (Unit: degree, Little Endian)
+    double   lon;             // Offset: 16, 64 bits (Unit: degree, Little Endian)
+
+    /* Altitude & Velocity */
+    float    alt;             // Offset: 24, 32 bits (Unit: m, Little Endian)
+    float    velN;            // Offset: 28, 32 bits (Unit: m/s, Little Endian)
+    float    velE;            // Offset: 32, 32 bits (Unit: m/s, Little Endian)
+    float    velU;            // Offset: 36, 32 bits (Unit: m/s, Little Endian)
+
+    /* Status & Padding */
+    UInt8  trackStatus;     // Offset: 40, 8 bits (GPS tracking status code)
+    UInt8  _reserved_align[3]; // Offset: 41, 24 bits (Padding for 4-byte alignment)
+
+    /* IMU Data (Gyro) */
+    float    meanGyroX;       // Offset: 44, 32 bits (Unit: degree/s, Little Endian)
+    float    meanGyroY;       // Offset: 48, 32 bits (Unit: degree/s, Little Endian)
+    float    meanGyroZ;       // Offset: 52, 32 bits (Unit: degree/s, Little Endian)
+
+    /* IMU Data (Accel) */
+    float    meanAccX;        // Offset: 56, 32 bits (Unit: m/s^2, Little Endian)
+    float    meanAccY;        // Offset: 60, 32 bits (Unit: m/s^2, Little Endian)
+    float    meanAccZ;        // Offset: 64, 32 bits (Unit: m/s^2, Little Endian)
+
+    /* Attitude */
+    float    roll;            // Offset: 68, 32 bits (Unit: degree, Little Endian)
+    float    pitch;           // Offset: 72, 32 bits (Unit: degree, Little Endian)
+    float    yaw;             // Offset: 76, 32 bits (Unit: degree, Little Endian)
+
+    /* Reserved Area */
+    UInt32 reserved[5];     // Offset: 80 ~ 99, 5 * 32 bits
+} TestData_t;
+
 /*==============================================================================
  * Global Function Declarations
  *============================================================================*/
@@ -86,5 +148,6 @@ SInt32 KissDecode(UInt8 ucByte, UInt8 *pDecodedBuf);
 SInt32 CspReceive(UInt8 *pPacket, SInt32 siLen);
 SInt32 CspSend(UInt8 dest, UInt8 dport, UInt8 *pData, UInt32 uiLen);
 void SendResponse(UInt8 ucSvc, UInt8 ucSub, UInt8 ucAck);
+void SendTestData(void);
 
 #endif /* __TMTC_H__ */

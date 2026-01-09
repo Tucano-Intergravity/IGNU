@@ -13,6 +13,7 @@
  *============================================================================*/
 #include "../Inc/ignu_task.h"
 #include "../Inc/TMTC.h"
+#include "../Inc/ins_gps.h"
 #include "xil_printf.h"
 
 /*==============================================================================
@@ -142,9 +143,37 @@ void IgnuTask( void *pvParameters )
                 /* Receive data from queue (Wait time 0 = Non-blocking) */
                 if( xQueueReceive( xImuDataQueue, &stImuData, 0 ) == pdTRUE )
                 {
-                    /* TODO: Process received IMU data */
-                    TickType_t xCurrentTick = xTaskGetTickCount();
-                    // xil_printf("[%u] [IGNU] IMU Data Received! Size: %d\r\n", xCurrentTick, stImuData.usSize);
+                    /* Extract 42 bytes (1 IMU Packet) from the received data */
+                    if (stImuData.usSize >= 42)
+                    {
+                        UInt8 ucImuPacket[42];
+                        memcpy(ucImuPacket, stImuData.ucData, 42);
+
+                        /* Check Identifier (Fixed: 0xA5) */
+                        if (ucImuPacket[0] != 0xA5) {
+                            xil_printf("[IGNU] IMU Sync Error! Byte0: 0x%02X (Expected 0xA5)\r\n", ucImuPacket[0]);
+                        }
+                        else {
+                            ImuData_t stDecodedImu;
+                            ProcessImuPacket(ucImuPacket, &stDecodedImu);
+
+                            TickType_t xCurrentTick = xTaskGetTickCount();
+                            xil_printf("[%u] [IMU] Acc(g): X=", xCurrentTick);
+                            PrintFloat(stDecodedImu.fAccX);
+                            xil_printf(" Y=");
+                            PrintFloat(stDecodedImu.fAccY);
+                            xil_printf(" Z=");
+                            PrintFloat(stDecodedImu.fAccZ);
+                            
+                            xil_printf(" | Gyro(dps): X=");
+                            PrintFloat(stDecodedImu.fGyroX);
+                            xil_printf(" Y=");
+                            PrintFloat(stDecodedImu.fGyroY);
+                            xil_printf(" Z=");
+                            PrintFloat(stDecodedImu.fGyroZ);
+                            xil_printf("\r\n");
+                        }
+                    }
                 }
             }
 
@@ -167,7 +196,11 @@ void IgnuTask( void *pvParameters )
         if (iLoopCnt >= 100)
         {
             iLoopCnt = 0;
-            xil_printf("[IGNU] Status: %s\r\n", (eCurrentState == IGNU_STATE_RUN) ? "RUN" : "IDLE");
+            // xil_printf("[IGNU] Status: %s\r\n", (eCurrentState == IGNU_STATE_RUN) ? "RUN" : "IDLE");
+            
+            if (eCurrentState == IGNU_STATE_RUN) {
+                SendTestData();
+            }
         }
 
         vTaskDelay( x10ms );
