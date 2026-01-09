@@ -195,7 +195,9 @@ SInt32 CspSend(UInt8 dest, UInt8 dport, UInt8 *pData, UInt32 uiLen)
     uiPktLen += uiLen;
 
     /* 3. CRC32 */
-    UInt32 uiCrc = Crc32Check(ucRawPkt, uiPktLen);
+    /* CRC Calculation: Payload ONLY (Exclude Header) */
+    /* ucRawPkt[0..3] is Header. Payload starts at ucRawPkt[4] */
+    UInt32 uiCrc = Crc32Check(&ucRawPkt[CSP_HEADER_SIZE], uiLen); // uiLen is Payload Length
     ucRawPkt[uiPktLen++] = (uiCrc >> 24) & 0xFF;
     ucRawPkt[uiPktLen++] = (uiCrc >> 16) & 0xFF;
     ucRawPkt[uiPktLen++] = (uiCrc >> 8) & 0xFF;
@@ -287,12 +289,15 @@ SInt32 CspReceive(UInt8 *pPacket, SInt32 siLen)
     if (siLen < (CSP_HEADER_SIZE + CSP_CRC32_SIZE)) return -1;
 
     UInt32 uiPayloadLen = siLen - CSP_CRC32_SIZE;
-    UInt32 uiCalcCrc = Crc32Check(pPacket, uiPayloadLen);
+    
+    /* CRC Calculation: Payload ONLY (Exclude Header) based on PDHS behavior */
+    UInt32 uiCalcCrc = Crc32Check(&pPacket[CSP_HEADER_SIZE], uiPayloadLen - CSP_HEADER_SIZE);
+
     UInt32 uiRecvCrc = (pPacket[siLen-4] << 24) | (pPacket[siLen-3] << 16) | 
                        (pPacket[siLen-2] << 8) | pPacket[siLen-1];
 
     if (uiCalcCrc != uiRecvCrc) {
-        xil_printf("[CSP] Error: CRC Mismatch\r\n");
+        xil_printf("[CSP] Error: CRC Mismatch (Calc: 0x%08X, Recv: 0x%08X)\r\n", uiCalcCrc, uiRecvCrc);
         return -2;
     }
 
@@ -329,7 +334,10 @@ static void CcsdsReceive(UInt8 *pCcsdsPacket, UInt32 uiLen)
         else if (ucSubtypeId == PUS_SUB_TEST_SET_PARAM) ProcSetTestParam();
         else if (ucSubtypeId == PUS_SUB_TEST_SEND_TPVAW) ProcSaveTpvaw();
         else if (ucSubtypeId >= PUS_SUB_TEST_DATA_MIN && ucSubtypeId <= PUS_SUB_TEST_DATA_MAX) ProcReqTestData(ucSubtypeId);
-        else SendResponse(ucServiceId, ucSubtypeId, TM_ACK_INVALID);
+        else {
+            xil_printf("[CCSDS] Unknown Subtype %d for Svc 1\r\n", ucSubtypeId);
+            SendResponse(ucServiceId, ucSubtypeId, TM_ACK_INVALID);
+        }
         break;
     case PUS_SVC_HK:
         if (ucSubtypeId == PUS_SUB_HK_REQ) ProcHkReq();
