@@ -156,6 +156,9 @@ void IgnuTask( void *pvParameters )
                         else {
                             ImuData_t stDecodedImu;
                             ProcessImuPacket(ucImuPacket, &stDecodedImu);
+                            
+                            /* Update Global IMU Data */
+                            SetImuData(&stDecodedImu);
 
                             TickType_t xCurrentTick = xTaskGetTickCount();
                             xil_printf("[%u] [IMU] Acc(g): X=", xCurrentTick);

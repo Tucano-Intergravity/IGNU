@@ -12,8 +12,27 @@
 #include "xil_printf.h"
 
 /*==============================================================================
+ * Local Variables
+ *============================================================================*/
+static ImuData_t stGlobalImuData;
+
+/*==============================================================================
  * Functions
  *============================================================================*/
+
+void SetImuData(ImuData_t *pData)
+{
+    if (pData) {
+        memcpy(&stGlobalImuData, pData, sizeof(ImuData_t));
+    }
+}
+
+void GetImuData(ImuData_t *pData)
+{
+    if (pData) {
+        memcpy(pData, &stGlobalImuData, sizeof(ImuData_t));
+    }
+}
 
 /**
  * @brief Convert 3-byte Big Endian 24-bit Signed Integer to Float

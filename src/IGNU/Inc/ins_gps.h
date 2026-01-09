@@ -55,5 +55,9 @@ void ProcessImuPacket(UInt8 *pRawData, ImuData_t *pOutput);
 float ConvertRaw24(UInt8 *pRaw, float fScale);
 void PrintFloat(float val);
 
+/* Data Accessors */
+void SetImuData(ImuData_t *pData);
+void GetImuData(ImuData_t *pData);
+
 #endif /* __INS_GPS_H__ */
 

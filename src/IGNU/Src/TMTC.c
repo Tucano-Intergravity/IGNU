@@ -11,6 +11,7 @@
  *============================================================================*/
 #include "../Inc/TMTC.h"
 #include "../Inc/ignu_task.h"
+#include "../Inc/ins_gps.h"
 #include "../../OPU/opu_task.h" // For SendToCom1
 #include "xil_printf.h"
 
@@ -432,25 +433,33 @@ void SendTestData(void)
 {
     static TestData_t stTestData;
     static UInt32 uiCounter = 0;
+    ImuData_t stImuData;
 
     /* Initialize with zeroes first */
     memset(&stTestData, 0, sizeof(TestData_t));
 
-    /* Mock Data Generation */
+    /* Mock Data Generation for GPS */
     uiCounter++;
     stTestData.gpsTime = uiCounter; // Just count up seconds
     stTestData.gpsWeek = 2200;
     stTestData.lat = 37.123456;
     stTestData.lon = 127.123456;
-    stTestData.alt = 100.0f + (float)(uiCounter % 10);
-    
-    stTestData.meanGyroX = 0.1f * (uiCounter % 5);
-    stTestData.meanGyroY = 0.2f * (uiCounter % 5);
-    stTestData.meanGyroZ = 0.3f * (uiCounter % 5);
+    stTestData.alt = 100.0f;
     
     stTestData.roll = 1.0f;
     stTestData.pitch = 2.0f;
     stTestData.yaw = 3.0f;
+    
+    /* Get Latest IMU Data */
+    GetImuData(&stImuData);
+
+    stTestData.meanAccX = stImuData.fAccX;
+    stTestData.meanAccY = stImuData.fAccY;
+    stTestData.meanAccZ = stImuData.fAccZ;
+    
+    stTestData.meanGyroX = stImuData.fGyroX;
+    stTestData.meanGyroY = stImuData.fGyroY;
+    stTestData.meanGyroZ = stImuData.fGyroZ;
 
     /* Send Telemetry */
     /* Service 1, Subtype 10 (PUS_SUB_TEST_REQ_DATA or PUS_SUB_TEST_DATA_MIN) */
