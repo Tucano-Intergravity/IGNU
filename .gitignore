@@ -1,0 +1,26 @@
+# Vitis/Eclipse Build Output
+Debug/
+Release/
+*.o
+*.d
+*.elf
+*.fsbl
+*.bit
+*.bif
+*.bin
+*.xsa
+*.log
+
+# IDE Settings
+.settings/
+.project
+.cproject
+.sdk/
+.metadata/
+.Xil/
+hw/
+export/
+
+# OS specific
+.DS_Store
+Thumbs.db
