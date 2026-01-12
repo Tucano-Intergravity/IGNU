@@ -2,7 +2,7 @@
  * @file TMTC.c
  * @author Sebum Chun (sebum.chun@intergravity.tech)
  * @brief Telemetry & Telecommand Processing Source File (KISS, CSP, CCSDS)
- * @version 1.4.0 (Add: Periodic Test Data Transmission)
+ * @version 1.5.0 (Add: Periodic Test Data Transmission with Rad->Deg Conv)
  * @date 2026-01-09
  */
 
@@ -16,13 +16,20 @@
 #include "xil_printf.h"
 
 /*==============================================================================
- * Define (KISS Protocol)
+ * Define
  *============================================================================*/
+/* KISS Protocol */
 #define KISS_FEND       0xC0
 #define KISS_FESC       0xDB
 #define KISS_TFEND      0xDC
 #define KISS_TFESC      0xDD
 #define KISS_CMD_DATA   0x00
+
+/* Math */
+#ifndef PI
+#define PI 3.14159265358979323846
+#endif
+#define RAD_TO_DEG  (180.0 / PI)
 
 /*==============================================================================
  * Type Definition
@@ -322,6 +329,7 @@ SInt32 CspReceive(UInt8 *pPacket, SInt32 siLen)
     }
     return 0;
 }
+
 static void CcsdsReceive(UInt8 *pCcsdsPacket, UInt32 uiLen)
 {
     /* Check Minimum Length: Pri(6) + TC_Sec(4) = 10 */
@@ -437,19 +445,17 @@ void SendTestData(void)
     /* Initialize with zeroes first */
     memset(&stTestData, 0, sizeof(TestData_t));
 
-    /* Get Latest GPS Data */
+    /* Get Latest GPS Data (Internal: Radians) */
     GetGpsData(&stGpsData);
 
-    stTestData.gpsTime = stGpsData.tow; // TOW is in milliseconds from GPS structure? 
-                                        // Wait, GPS struct definition says TOW is UInt32. 
-                                        // Usually TOW is ms. Check unit. 
-                                        // If it is ms, we might need to convert or just send as is.
-                                        // User requested "actual data". Let's assume raw TOW is fine for now.
-    stTestData.gpsWeek = (UInt32)stGpsData.wnc; // WNC is UInt16 in GPS struct
+    stTestData.gpsTime = stGpsData.tow; 
+    stTestData.gpsWeek = (UInt32)stGpsData.wnc; 
     
-    stTestData.lat = stGpsData.latitude;
-    stTestData.lon = stGpsData.longitude;
-    stTestData.alt = (float)stGpsData.height; // Height is double in GPS struct, float in TestData
+    /* Convert Radian to Degree for Telemetry */
+    stTestData.lat = stGpsData.latitude * RAD_TO_DEG;
+    stTestData.lon = stGpsData.longitude * RAD_TO_DEG;
+    
+    stTestData.alt = (float)stGpsData.height; 
     
     stTestData.velN = stGpsData.vn;
     stTestData.velE = stGpsData.ve;
@@ -470,7 +476,7 @@ void SendTestData(void)
     stTestData.meanGyroY = stImuData.fGyroY;
     stTestData.meanGyroZ = stImuData.fGyroZ;
 
-    /* Mock Attitude (Roll, Pitch, Yaw) as they are not calculated yet */
+    /* Mock Attitude (Roll, Pitch, Yaw) */
     stTestData.roll = 0.0f;
     stTestData.pitch = 0.0f;
     stTestData.yaw = 0.0f;
@@ -479,4 +485,3 @@ void SendTestData(void)
     /* Service 1, Subtype 10 (PUS_SUB_TEST_REQ_DATA or PUS_SUB_TEST_DATA_MIN) */
     SendCcsdsTm(PUS_SVC_TEST, PUS_SUB_TEST_REQ_DATA, (UInt8*)&stTestData, sizeof(TestData_t));
 }
-

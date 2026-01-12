@@ -96,49 +96,6 @@ typedef struct __attribute__((packed)) {
     // _reserved2 removed
 } PayloadStatus_t;
 
-/* ============================================================================
- * 6.2.2 Test Data Telemetry (Reply Test Data)
- * Total Size: 76 Bytes (ICD Compliant)
- * ============================================================================ */
-//typedef struct __attribute__((packed)) {
-//    /* GPS Time Information */
-//    UInt32 gpsWeek;         // 4 bytes
-//    UInt32 gpsTime;         // 4 bytes
-//
-//    /* Position */
-//    double   lat;             // 8 bytes
-//    double   lon;             // 8 bytes
-//    float    alt;             // 4 bytes (ICD says 32bit float)
-//
-//    /* Velocity */
-//    float    velN;            // 4 bytes
-//    float    velE;            // 4 bytes
-//    float    velU;            // 4 bytes
-//
-//    /* Status */
-//    UInt8  mode;            // 1 byte
-//    UInt8  error;           // 1 byte
-//    UInt8  NrSV;            // 1 byte
-//    // _reserved_align removed
-//
-//    /* IMU Data (Gyro) */
-//    float    meanGyroX;       // 4 bytes
-//    float    meanGyroY;       // 4 bytes
-//    float    meanGyroZ;       // 4 bytes
-//
-//    /* IMU Data (Accel) */
-//    float    meanAccX;        // 4 bytes
-//    float    meanAccY;        // 4 bytes
-//    float    meanAccZ;        // 4 bytes
-//
-//    /* Attitude */
-//    float    roll;            // 4 bytes
-//    float    pitch;           // 4 bytes
-//    float    yaw;             // 4 bytes
-//
-//    /* Reserved Area REMOVED */
-//    // UInt32 reserved[5]; removed to match ICD
-//} TestData_t;
 
 /* ============================================================================
  * 6.2.2 Test Data Telemetry (Reply Test Data)

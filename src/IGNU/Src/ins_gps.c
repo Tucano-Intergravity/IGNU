@@ -122,53 +122,83 @@ void PrintDouble(double val)
 }
 
 /**
- * @brief Parse GPS Packet (Mock Implementation)
- * Assumes NovAtel Binary Log structure or similar custom format
+ * @brief Safe Parsing of Custom Raw GPS Packet
+ * Uses memcpy to copy fields byte-by-byte to prevent Hard Faults 
+ * due to Unaligned Memory Access (e.g. double at offset 10).
  * 
- * @param pData Pointer to raw packet buffer (90 bytes)
- * @param pOutput Pointer to GpsData_t to populate
+ * @param pRawData Pointer to raw packet buffer (91 bytes)
+ * @param pOutput Pointer to Aligned GpsData_t
  * @return SInt32 0 on Success, -1 on Error
  */
-SInt32 ParseGpsPacket(UInt8 *pData, GpsData_t *pOutput)
+SInt32 ParseGpsPacket(const UInt8 *pRawData, GpsData_t *pOutput)
 {
-    if (pData == NULL || pOutput == NULL) return -1;
+    if (pRawData == NULL || pOutput == NULL) return -1;
 
-    /* Check Sync Bytes (Assuming NovAtel AA 44 12) */
-    if (pData[0] != 0xAA || pData[1] != 0x44 || pData[2] != 0x12) {
-        // xil_printf("GPS Sync Error: %02X %02X %02X\r\n", pData[0], pData[1], pData[2]);
-        // Return 0 for now to allow mocked testing if real hardware isn't attached
-        // return -1; 
+    /* 1. Check Sync Word (0x2440 at Offset 0) */
+    /* Note: Sync Word is Big Endian? Or Little Endian 0x24 0x40? 
+       User spec says: Sync Word is Big Endian 0x2440. 
+       Assuming byte stream is 0x24 0x40. 
+    */
+    if (pRawData[0] != 0x24 || pRawData[1] != 0x40) {
+        /* Sync Failed */
+        return -1; 
     }
 
     /* 
-     * TODO: Implement actual parsing logic based on ICD.
-     * For now, we populate with some data from the packet or defaults.
-     * Assuming standard NovAtel Header is 28 bytes.
+     * 2. Safe Parsing using memcpy 
+     * We MUST use memcpy for multi-byte fields because pRawData + Offset 
+     * might not be aligned (e.g. Latitude double at Offset 10).
+     * Direct casting like *(double*)(pRawData+10) WILL cause Hard Fault on ARM M0/M3/M4/M7.
      */
 
-    /* Header Parsing */
-    // pOutput->wnc = (pData[14] << 8) | pData[15]; // Week
-    // pOutput->tow = (pData[16] << 24) | (pData[17] << 16) | (pData[18] << 8) | pData[19]; // ms
+    /* Offset 2: TOW (UInt32) */
+    memcpy(&pOutput->tow, &pRawData[2], 4);
 
-    /* Mocking data extraction - Mapping based on ignu_task.c print */
-    /* It printed Lat from offset 10..17 (8 bytes double) */
-    
-    // memcpy(&pOutput->latitude, &pData[10], 8);
-    // memcpy(&pOutput->longitude, &pData[18], 8);
-    // memcpy(&pOutput->height, &pData[26], 8);
-    
-    /* Just use placeholders for now to satisfy build */
-    pOutput->tow = 0;
-    pOutput->wnc = 0;
-    pOutput->latitude = 0.0;
-    pOutput->longitude = 0.0;
-    pOutput->height = 0.0;
-    pOutput->vn = 0.0f;
-    pOutput->ve = 0.0f;
-    pOutput->vu = 0.0f;
-    pOutput->mode = 0;
-    pOutput->error = 0;
-    pOutput->nrSv = 0;
+    /* Offset 6: WNC (UInt16) */
+    memcpy(&pOutput->wnc, &pRawData[6], 2);
+
+    /* Offset 8, 9: Mode, Error (UInt8 - Safe) */
+    pOutput->mode = pRawData[8];
+    pOutput->error = pRawData[9];
+
+    /* Offset 10: Latitude (Double - 8 Bytes - Unaligned!) */
+    memcpy(&pOutput->latitude, &pRawData[10], 8);
+
+    /* Offset 18: Longitude (Double - 8 Bytes) */
+    memcpy(&pOutput->longitude, &pRawData[18], 8);
+
+    /* Offset 26: Height (Double - 8 Bytes) */
+    memcpy(&pOutput->height, &pRawData[26], 8);
+
+    /* Offset 34: Undulation (Float - 4 Bytes) */
+    memcpy(&pOutput->undulation, &pRawData[34], 4);
+
+    /* Offset 38: Vn (Float - 4 Bytes) */
+    memcpy(&pOutput->vn, &pRawData[38], 4);
+
+    /* Offset 42: Ve (Float - 4 Bytes) */
+    memcpy(&pOutput->ve, &pRawData[42], 4);
+
+    /* Offset 46: Vu (Float - 4 Bytes) */
+    memcpy(&pOutput->vu, &pRawData[46], 4);
+
+    /* Offset 50: Gog (Float - 4 Bytes) */
+    memcpy(&pOutput->gog, &pRawData[50], 4);
+
+    /* Offset 54: RxClkBias (Double - 8 Bytes) */
+    memcpy(&pOutput->rxClkBias, &pRawData[54], 8);
+
+    /* Offset 62: RxClkDrift (Float - 4 Bytes) */
+    memcpy(&pOutput->rxClkDrift, &pRawData[62], 4);
+
+    /* Offset 68: NrSV (UInt8) */
+    pOutput->nrSv = pRawData[68];
+
+    /* Offset 84: H-Accuracy (UInt16) */
+    memcpy(&pOutput->hAccuracy, &pRawData[84], 2);
+
+    /* Offset 86: V-Accuracy (UInt16) */
+    memcpy(&pOutput->vAccuracy, &pRawData[86], 2);
 
     return 0; // Success
 }

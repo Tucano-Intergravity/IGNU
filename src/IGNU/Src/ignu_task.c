@@ -235,6 +235,7 @@ void IgnuTask( void *pvParameters )
                             /* Update Global GPS Data */
                             SetGpsData(&stDecodedGps);
 
+
                             TickType_t xCurrentTick = xTaskGetTickCount();
                             
                             /* Debug: Print Raw Hex for Lat/Lon to verify data */
