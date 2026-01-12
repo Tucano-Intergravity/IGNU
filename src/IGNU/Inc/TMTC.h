@@ -2,7 +2,7 @@
  * @file TMTC.h
  * @author Sebum Chun (sebum.chun@intergravity.tech)
  * @brief Telemetry & Telecommand Processing Header
- * @version 1.3.0 (Fix: R06.6 Compliance - 12B Header, 4B Response)
+ * @version 1.5.0 (Fix: Use __attribute__((packed)) for Safe ICD Compliance)
  * @date 2026-01-09
  */
 
@@ -35,7 +35,7 @@
 #define CCSDS_APID_IGNU     0x550 // IGNU Application Process ID (Table 5)
 #define CCSDS_PRI_HEADER_SIZE 6
 #define CCSDS_TC_SEC_HEADER_SIZE 4   // TC: Svc(1)+Sub(1)+Src(2)
-#define CCSDS_TM_SEC_HEADER_SIZE 12  // TM: Svc(1)+Sub(1)+Src(2)+Time(6)+Flags(1)+Pad(1) = 12 Bytes (R06.6)
+#define CCSDS_TM_SEC_HEADER_SIZE 12  // TM: Svc(1)+Sub(1)+Src(2)+Time(6)+Flags(1)+Spare(1) = 12 Bytes
 
 /* Response Constants (Table 9) */
 #define TM_ACK_VALID        0xFF // Valid TC
@@ -81,22 +81,64 @@ typedef struct {
 
 /* ============================================================================
  * 6.2.1 Payload Status Telemetry (Reply Status)
- * Service: 5, Subtype: 1
- * Total Size: 8 Bytes (Previously 6 Bytes)
+ * Total Size: 6 Bytes (ICD Compliant)
  * ============================================================================ */
-typedef struct {
-    UInt8  payloadStatus;   // Offset: 0, 8 bits (0=Idle, 1=Testing, ...)
-    UInt8  _reserved1;      // Offset: 1, 8 bits (Padding for alignment)
-
-    SInt16  boardTemp;       // Offset: 2, 16 bits (Unit: 0.1 degC, Little Endian)
-
-    UInt8  imuStatus;       // Offset: 4, 8 bits (0=Normal, 1=Fault)
-    UInt8  gpsStatus;       // Offset: 5, 8 bits (0=Normal, 1=Fault)
-    UInt8  gpsTrackStatus;  // Offset: 6, 8 bits (GPS tracking status code)
-
-    UInt8  _reserved2;      // Offset: 7, 8 bits (Padding to match 4/8 byte alignment)
+typedef struct __attribute__((packed)) {
+    UInt8  payloadStatus;   // 1 byte
+    // _reserved1 removed
+    
+    SInt16  boardTemp;       // 2 bytes
+    
+    UInt8  imuStatus;       // 1 byte
+    UInt8  gpsStatus;       // 1 byte
+    UInt8  gpsTrackStatus;  // 1 byte
+    
+    // _reserved2 removed
 } PayloadStatus_t;
 
+/* ============================================================================
+ * 6.2.2 Test Data Telemetry (Reply Test Data)
+ * Total Size: 76 Bytes (ICD Compliant)
+ * ============================================================================ */
+//typedef struct __attribute__((packed)) {
+//    /* GPS Time Information */
+//    UInt32 gpsWeek;         // 4 bytes
+//    UInt32 gpsTime;         // 4 bytes
+//
+//    /* Position */
+//    double   lat;             // 8 bytes
+//    double   lon;             // 8 bytes
+//    float    alt;             // 4 bytes (ICD says 32bit float)
+//
+//    /* Velocity */
+//    float    velN;            // 4 bytes
+//    float    velE;            // 4 bytes
+//    float    velU;            // 4 bytes
+//
+//    /* Status */
+//    UInt8  mode;            // 1 byte
+//    UInt8  error;           // 1 byte
+//    UInt8  NrSV;            // 1 byte
+//    // _reserved_align removed
+//
+//    /* IMU Data (Gyro) */
+//    float    meanGyroX;       // 4 bytes
+//    float    meanGyroY;       // 4 bytes
+//    float    meanGyroZ;       // 4 bytes
+//
+//    /* IMU Data (Accel) */
+//    float    meanAccX;        // 4 bytes
+//    float    meanAccY;        // 4 bytes
+//    float    meanAccZ;        // 4 bytes
+//
+//    /* Attitude */
+//    float    roll;            // 4 bytes
+//    float    pitch;           // 4 bytes
+//    float    yaw;             // 4 bytes
+//
+//    /* Reserved Area REMOVED */
+//    // UInt32 reserved[5]; removed to match ICD
+//} TestData_t;
 
 /* ============================================================================
  * 6.2.2 Test Data Telemetry (Reply Test Data)
@@ -119,8 +161,10 @@ typedef struct {
     float    velU;            // Offset: 36, 32 bits (Unit: m/s, Little Endian)
 
     /* Status & Padding */
-    UInt8  trackStatus;     // Offset: 40, 8 bits (GPS tracking status code)
-    UInt8  _reserved_align[3]; // Offset: 41, 24 bits (Padding for 4-byte alignment)
+    UInt8  mode;            // Offset: 40, 8 bits (GPS PVT mode)
+    UInt8  error;           // Offset: 41, 8 bits (GPS PVT error)
+    UInt8  NrSV;            // Offset: 42, 8 bits (GPS observable satellite)
+    UInt8  _reserved_align; // Offset: 43, 8 bits (Padding for 4-byte alignment)
 
     /* IMU Data (Gyro) */
     float    meanGyroX;       // Offset: 44, 32 bits (Unit: degree/s, Little Endian)
@@ -140,6 +184,8 @@ typedef struct {
     /* Reserved Area */
     UInt32 reserved[5];     // Offset: 80 ~ 99, 5 * 32 bits
 } TestData_t;
+
+
 
 /*==============================================================================
  * Global Function Declarations

@@ -103,13 +103,24 @@ int main()
 				tskIDLE_PRIORITY+1,			/* The task runs at the idle priority. */
 				&xDbgTask );
 
+	/* IGNU App Initialization (Queue Creation) */
+	IgnuAppInit();
+
 	/* IGNU Task ?? */
 	xTaskCreate( IgnuTask, 					/* The function that implements the task. */
 				( const char * ) "IGNU", 	/* Text name for the task, provided to assist debugging only. */
-				SCDAU_STACK_SIZE, 			/* The stack allocated to the task. */
+				SCDAU_STACK_SIZE*4, 			/* The stack allocated to the task. (Increased for CSP buffers) */
 				NULL, 						/* The task parameter is not used, so set to NULL. */
 				tskIDLE_PRIORITY+2,			/* The task runs at the idle priority. */
 				&xIgnuTask );
+
+    /* IGNU Tx Task (1Hz) */
+	xTaskCreate( TxTask, 					/* The function that implements the task. */
+				( const char * ) "IGNU_TX", 	/* Text name for the task, provided to assist debugging only. */
+				SCDAU_STACK_SIZE*4, 			/* The stack allocated to the task. (Increased for CSP buffers) */
+				NULL, 						/* The task parameter is not used, so set to NULL. */
+				tskIDLE_PRIORITY+2,			/* The task runs at the idle priority. */
+				NULL );
 
 	//xTaskCreate( test_thread, (const char*)"test_thread", SCDAU_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, &xTestTask );
 

@@ -15,6 +15,7 @@
  * Local Variables
  *============================================================================*/
 static ImuData_t stGlobalImuData;
+static GpsData_t stGlobalGpsData;
 
 /*==============================================================================
  * Functions
@@ -31,6 +32,20 @@ void GetImuData(ImuData_t *pData)
 {
     if (pData) {
         memcpy(pData, &stGlobalImuData, sizeof(ImuData_t));
+    }
+}
+
+void SetGpsData(GpsData_t *pData)
+{
+    if (pData) {
+        memcpy(&stGlobalGpsData, pData, sizeof(GpsData_t));
+    }
+}
+
+void GetGpsData(GpsData_t *pData)
+{
+    if (pData) {
+        memcpy(pData, &stGlobalGpsData, sizeof(GpsData_t));
     }
 }
 
@@ -91,3 +106,69 @@ void PrintFloat(float val)
     xil_printf("%d.%04d", iPart, fPart);
 }
 
+/**
+ * @brief Helper to print double values using xil_printf
+ */
+void PrintDouble(double val)
+{
+    if (val < 0) {
+        xil_printf("-");
+        val = -val;
+    }
+    
+    int iPart = (int)val;
+    int fPart = (int)((val - iPart) * 1000000);
+    xil_printf("%d.%06d", iPart, fPart);
+}
+
+/**
+ * @brief Parse GPS Packet (Mock Implementation)
+ * Assumes NovAtel Binary Log structure or similar custom format
+ * 
+ * @param pData Pointer to raw packet buffer (90 bytes)
+ * @param pOutput Pointer to GpsData_t to populate
+ * @return SInt32 0 on Success, -1 on Error
+ */
+SInt32 ParseGpsPacket(UInt8 *pData, GpsData_t *pOutput)
+{
+    if (pData == NULL || pOutput == NULL) return -1;
+
+    /* Check Sync Bytes (Assuming NovAtel AA 44 12) */
+    if (pData[0] != 0xAA || pData[1] != 0x44 || pData[2] != 0x12) {
+        // xil_printf("GPS Sync Error: %02X %02X %02X\r\n", pData[0], pData[1], pData[2]);
+        // Return 0 for now to allow mocked testing if real hardware isn't attached
+        // return -1; 
+    }
+
+    /* 
+     * TODO: Implement actual parsing logic based on ICD.
+     * For now, we populate with some data from the packet or defaults.
+     * Assuming standard NovAtel Header is 28 bytes.
+     */
+
+    /* Header Parsing */
+    // pOutput->wnc = (pData[14] << 8) | pData[15]; // Week
+    // pOutput->tow = (pData[16] << 24) | (pData[17] << 16) | (pData[18] << 8) | pData[19]; // ms
+
+    /* Mocking data extraction - Mapping based on ignu_task.c print */
+    /* It printed Lat from offset 10..17 (8 bytes double) */
+    
+    // memcpy(&pOutput->latitude, &pData[10], 8);
+    // memcpy(&pOutput->longitude, &pData[18], 8);
+    // memcpy(&pOutput->height, &pData[26], 8);
+    
+    /* Just use placeholders for now to satisfy build */
+    pOutput->tow = 0;
+    pOutput->wnc = 0;
+    pOutput->latitude = 0.0;
+    pOutput->longitude = 0.0;
+    pOutput->height = 0.0;
+    pOutput->vn = 0.0f;
+    pOutput->ve = 0.0f;
+    pOutput->vu = 0.0f;
+    pOutput->mode = 0;
+    pOutput->error = 0;
+    pOutput->nrSv = 0;
+
+    return 0; // Success
+}

@@ -2,8 +2,8 @@
  * @file ignu_task.c
  * @author Sebum Chun (sebum.chun@intergravity.tech)
  * @brief IGNU Task Source File (GPS, IMU, TM/TC Processing)
- * @version 1.0.0
- * @date 2026-01-08
+ * @version 1.2.0 (Split Tx Task for Precise Timing)
+ * @date 2026-01-09
  *
  * @copyright Intergravity Technologies Copyright (c) 2026
  */
@@ -29,12 +29,32 @@ QueueHandle_t xCom1DataQueue = NULL;
 static IgnuState_t eCurrentState = IGNU_STATE_IDLE;
 
 /*==============================================================================
- * Local Function Declarations
- *============================================================================*/
-
-/*==============================================================================
  * Functions
  *============================================================================*/
+
+/**
+ * @brief Initialize IGNU Queues and Resources
+ * Should be called from main() before scheduler starts
+ */
+void IgnuAppInit(void)
+{
+    /* Create IMU Data Queue (Reduced Size: 2 to save Heap) */
+    if (xImuDataQueue == NULL) {
+        xImuDataQueue = xQueueCreate( 2, sizeof(sRbData) );
+    }
+
+    /* Create GPS Data Queue (Reduced Size: 2) */
+    if (xGpsDataQueue == NULL) {
+        xGpsDataQueue = xQueueCreate( 2, sizeof(sRbData) );
+    }
+
+    /* Create COM1 Data Queue (Reduced Size: 4) */
+    if (xCom1DataQueue == NULL) {
+        xCom1DataQueue = xQueueCreate( 4, sizeof(sRbData) );
+    }
+    
+    xil_printf("[IGNU] Queues Initialized.\r\n");
+}
 
 void SetIgnuState(IgnuState_t eState)
 {
@@ -48,8 +68,36 @@ IgnuState_t GetIgnuState(void)
 }
 
 /**
+ * @fn TxTask
+ * @brief Periodic Telemetry Transmission Task (1Hz)
+ * @param pvParameters Task parameters
+ * @return void
+ */
+void TxTask( void *pvParameters )
+{
+    const TickType_t x1000ms = pdMS_TO_TICKS( 1000 ); // 1Hz
+    TickType_t xLastWakeTime;
+
+    xil_printf("[IGNU] TxTask Started.\r\n");
+
+    /* Initialize xLastWakeTime for vTaskDelayUntil */
+    xLastWakeTime = xTaskGetTickCount();
+
+    while(1)
+    {
+        /* Wait for 1 second */
+        vTaskDelayUntil( &xLastWakeTime, x1000ms );
+
+        /* Check State */
+        if (eCurrentState == IGNU_STATE_RUN) {
+            SendTestData();
+        }
+    }
+}
+
+/**
  * @fn IgnuTask
- * @brief IGNU Processing Task (GPS, IMU, TM/TC)
+ * @brief IGNU Processing Task (GPS, IMU, TM/TC Reception)
  * @param pvParameters Task parameters
  * @return void
  */
@@ -63,31 +111,13 @@ void IgnuTask( void *pvParameters )
     /* Static buffer for decoded packet to save stack size */
     static UInt8 ucDecodedPacket[MAX_KISS_BUF]; 
 
-    /* Initialization */
-    static int iLoopCnt = 0; // For periodic status log
-
-    /* Create IMU Data Queue (Size: 10, Item Size: size of sRbData structure) */
-    xImuDataQueue = xQueueCreate( 10, sizeof(sRbData) );
-    if( xImuDataQueue == NULL )
-    {
-        xil_printf("[IGNU] Failed to create IMU Queue!\r\n");
+    /* Note: Queues are now initialized in IgnuAppInit() called from main */
+    /* Safety check in case Init wasn't called */
+    if (xImuDataQueue == NULL || xGpsDataQueue == NULL || xCom1DataQueue == NULL) {
+        IgnuAppInit();
     }
 
-    /* Create GPS Data Queue (Size: 10, Item Size: size of sRbData structure) */
-    xGpsDataQueue = xQueueCreate( 10, sizeof(sRbData) );
-    if( xGpsDataQueue == NULL )
-    {
-        xil_printf("[IGNU] Failed to create GPS Queue!\r\n");
-    }
-
-    /* Create COM1 Data Queue (Size: 10, Item Size: size of sRbData structure) */
-    xCom1DataQueue = xQueueCreate( 10, sizeof(sRbData) );
-    if( xCom1DataQueue == NULL )
-    {
-        xil_printf("[IGNU] Failed to create COM1 Queue!\r\n");
-    }
-
-    xil_printf("[IGNU] Task Started.\r\n");
+    xil_printf("[IGNU] RxTask Started.\r\n");
 
     while(1)
     {
@@ -98,12 +128,14 @@ void IgnuTask( void *pvParameters )
             if( xQueueReceive( xCom1DataQueue, &stCom1Data, 0 ) == pdTRUE )
             {
                 /* Debug: Print Raw Data size */
+                /*
                 xil_printf("[IGNU] Raw Com1 (%d): ", stCom1Data.usSize);
                 for(int i=0; i<stCom1Data.usSize; i++)
                 {
                     xil_printf("%02X ", stCom1Data.ucData[i]);
                 }
                 xil_printf("\r\n");
+                */
                 
                 /* Process received Com1 data via KISS Decoder */
                 SInt32 siDecodedLen;
@@ -160,6 +192,8 @@ void IgnuTask( void *pvParameters )
                             /* Update Global IMU Data */
                             SetImuData(&stDecodedImu);
 
+                            /* Debug Log Reduced */
+                            /*
                             TickType_t xCurrentTick = xTaskGetTickCount();
                             xil_printf("[%u] [IMU] Acc(g): X=", xCurrentTick);
                             PrintFloat(stDecodedImu.fAccX);
@@ -175,6 +209,7 @@ void IgnuTask( void *pvParameters )
                             xil_printf(" Z=");
                             PrintFloat(stDecodedImu.fGyroZ);
                             xil_printf("\r\n");
+                            */
                         }
                     }
                 }
@@ -186,24 +221,52 @@ void IgnuTask( void *pvParameters )
                 /* Receive data from queue (Wait time 0 = Non-blocking) */
                 if( xQueueReceive( xGpsDataQueue, &stGpsData, 0 ) == pdTRUE )
                 {
-                    /* TODO: Process received GPS data */
-                    TickType_t xCurrentTick = xTaskGetTickCount();
-                    // xil_printf("[%u] [IGNU] GPS Data Received! Size: %d, Counter: %d\r\n", xCurrentTick, stGpsData.usSize, stGpsData.ucData[stGpsData.usSize-1]);
+                    /* Extract 90 bytes (1 GPS Packet) from the received data */
+                    /* Note: Assuming stGpsData.usSize holds the packet size */
+                    if (stGpsData.usSize >= 90)
+                    {
+                        UInt8 ucGpsPacket[90];
+                        memcpy(ucGpsPacket, stGpsData.ucData, 90);
+                        
+                        GpsData_t stDecodedGps;
+                        memset(&stDecodedGps, 0, sizeof(GpsData_t));
+                        if (ParseGpsPacket(ucGpsPacket, &stDecodedGps) == 0)
+                        {
+                            /* Update Global GPS Data */
+                            SetGpsData(&stDecodedGps);
+
+                            TickType_t xCurrentTick = xTaskGetTickCount();
+                            
+                            /* Debug: Print Raw Hex for Lat/Lon to verify data */
+                            /*
+                            xil_printf("[%u] [GPS Raw] Lat: %02X %02X %02X %02X %02X %02X %02X %02X\r\n", 
+                                xCurrentTick,
+                                ucGpsPacket[10], ucGpsPacket[11], ucGpsPacket[12], ucGpsPacket[13],
+                                ucGpsPacket[14], ucGpsPacket[15], ucGpsPacket[16], ucGpsPacket[17]);
+                            */
+
+                            /* Debug: Dump Full Packet (Offset 0-89) for thorough check */
+                            /*
+                            xil_printf("[GPS Dump] Sync:%02X%02X TOW:%02X%02X%02X%02X Mode:%02X Err:%02X\r\n",
+                                ucGpsPacket[0], ucGpsPacket[1], 
+                                ucGpsPacket[2], ucGpsPacket[3], ucGpsPacket[4], ucGpsPacket[5],
+                                ucGpsPacket[8], ucGpsPacket[9]);
+                            */
+
+                            xil_printf("[%u] [GPS] TOW: %u Lat:", xCurrentTick, stDecodedGps.tow);
+                            PrintDouble(stDecodedGps.latitude);
+                            xil_printf(" Lon:");
+                            PrintDouble(stDecodedGps.longitude);
+                            xil_printf(" NrSV: %u\r\n", stDecodedGps.nrSv);
+                        }
+                        else
+                        {
+                            xil_printf("[IGNU] GPS Sync/Parse Error!\r\n");
+                        }
+                    }
                 }
             }
             break;
-        }
-
-        /* 3. Periodic Status Log (Every 1 sec) */
-        iLoopCnt++;
-        if (iLoopCnt >= 100)
-        {
-            iLoopCnt = 0;
-            // xil_printf("[IGNU] Status: %s\r\n", (eCurrentState == IGNU_STATE_RUN) ? "RUN" : "IDLE");
-            
-            if (eCurrentState == IGNU_STATE_RUN) {
-                SendTestData();
-            }
         }
 
         vTaskDelay( x10ms );

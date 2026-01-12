@@ -1086,8 +1086,8 @@ void OpuTask( void *pvParameters )
     /* 메인 주기 카운트 */
 	UInt16 usMainCnt = 0;
 
-    /* 네트워크 설정 구조체 초기화 */
-    vTaskDelay( x10ms*30 );
+    /* 네트워크 설정 구조체 초기화 (Reduced delay from 300ms to 10ms for fast startup) */
+    vTaskDelay( x10ms );
 
 	/* 인터럽트 초기화 */
 	InitInterrupt();

@@ -48,16 +48,38 @@ typedef struct {
     UInt8 ucCounter;
 } ImuData_t;
 
+/* GPS Data Structure */
+typedef struct {
+    UInt32 tow;         // Time of Week (ms)
+    UInt16 wnc;         // Week Number Count
+    double latitude;    // deg
+    double longitude;   // deg
+    double height;      // m
+    float  vn;          // Velocity North (m/s)
+    float  ve;          // Velocity East (m/s)
+    float  vu;          // Velocity Up (m/s)
+    UInt8  mode;        // Position Mode
+    UInt8  error;       // Error status
+    UInt8  nrSv;        // Number of SVs
+} GpsData_t;
+
+
+
 /*==============================================================================
  * Global Function Declarations
  *============================================================================*/
+/* IMU Functions */
 void ProcessImuPacket(UInt8 *pRawData, ImuData_t *pOutput);
 float ConvertRaw24(UInt8 *pRaw, float fScale);
 void PrintFloat(float val);
-
-/* Data Accessors */
 void SetImuData(ImuData_t *pData);
 void GetImuData(ImuData_t *pData);
 
-#endif /* __INS_GPS_H__ */
+/* GPS Functions */
+/* Updated Signature to match usage in ignu_task.c */
+SInt32 ParseGpsPacket(UInt8 *pData, GpsData_t *pOutput); 
+void SetGpsData(GpsData_t *pData);
+void GetGpsData(GpsData_t *pData);
+void PrintDouble(double val);
 
+#endif /* __INS_GPS_H__ */

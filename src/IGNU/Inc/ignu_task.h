@@ -38,7 +38,9 @@ typedef enum {
 /*==============================================================================
  * Gloabal Function Declarations
  *============================================================================*/
+void IgnuAppInit(void);
 void IgnuTask( void *pvParameters );
+void TxTask( void *pvParameters );
 void SetIgnuState(IgnuState_t eState);
 IgnuState_t GetIgnuState(void);
 

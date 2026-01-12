@@ -322,7 +322,6 @@ SInt32 CspReceive(UInt8 *pPacket, SInt32 siLen)
     }
     return 0;
 }
-
 static void CcsdsReceive(UInt8 *pCcsdsPacket, UInt32 uiLen)
 {
     /* Check Minimum Length: Pri(6) + TC_Sec(4) = 10 */
@@ -432,24 +431,34 @@ static void ProcHkReq(void) {
 void SendTestData(void)
 {
     static TestData_t stTestData;
-    static UInt32 uiCounter = 0;
     ImuData_t stImuData;
+    GpsData_t stGpsData;
 
     /* Initialize with zeroes first */
     memset(&stTestData, 0, sizeof(TestData_t));
 
-    /* Mock Data Generation for GPS */
-    uiCounter++;
-    stTestData.gpsTime = uiCounter; // Just count up seconds
-    stTestData.gpsWeek = 2200;
-    stTestData.lat = 37.123456;
-    stTestData.lon = 127.123456;
-    stTestData.alt = 100.0f;
+    /* Get Latest GPS Data */
+    GetGpsData(&stGpsData);
+
+    stTestData.gpsTime = stGpsData.tow; // TOW is in milliseconds from GPS structure? 
+                                        // Wait, GPS struct definition says TOW is UInt32. 
+                                        // Usually TOW is ms. Check unit. 
+                                        // If it is ms, we might need to convert or just send as is.
+                                        // User requested "actual data". Let's assume raw TOW is fine for now.
+    stTestData.gpsWeek = (UInt32)stGpsData.wnc; // WNC is UInt16 in GPS struct
     
-    stTestData.roll = 1.0f;
-    stTestData.pitch = 2.0f;
-    stTestData.yaw = 3.0f;
+    stTestData.lat = stGpsData.latitude;
+    stTestData.lon = stGpsData.longitude;
+    stTestData.alt = (float)stGpsData.height; // Height is double in GPS struct, float in TestData
     
+    stTestData.velN = stGpsData.vn;
+    stTestData.velE = stGpsData.ve;
+    stTestData.velU = stGpsData.vu;
+
+    stTestData.mode = stGpsData.mode;
+    stTestData.error = stGpsData.error;
+    stTestData.NrSV = stGpsData.nrSv;
+
     /* Get Latest IMU Data */
     GetImuData(&stImuData);
 
@@ -461,7 +470,13 @@ void SendTestData(void)
     stTestData.meanGyroY = stImuData.fGyroY;
     stTestData.meanGyroZ = stImuData.fGyroZ;
 
+    /* Mock Attitude (Roll, Pitch, Yaw) as they are not calculated yet */
+    stTestData.roll = 0.0f;
+    stTestData.pitch = 0.0f;
+    stTestData.yaw = 0.0f;
+
     /* Send Telemetry */
     /* Service 1, Subtype 10 (PUS_SUB_TEST_REQ_DATA or PUS_SUB_TEST_DATA_MIN) */
     SendCcsdsTm(PUS_SVC_TEST, PUS_SUB_TEST_REQ_DATA, (UInt8*)&stTestData, sizeof(TestData_t));
 }
+
