@@ -232,9 +232,20 @@ void IgnuTask( void *pvParameters )
                         memset(&stDecodedGps, 0, sizeof(GpsData_t));
                         if (ParseGpsPacket(ucGpsPacket, &stDecodedGps) == 0)
                         {
+                            if (stDecodedGps.mode == 0) {
+                                stDecodedGps.latitude = 0;
+                                stDecodedGps.longitude = 0;
+                                stDecodedGps.height = 0;
+                                stDecodedGps.vn = 0;
+                                stDecodedGps.ve = 0;
+                                stDecodedGps.vu = 0;
+                                stDecodedGps.nrSv = 0;
+                                stDecodedGps.hAccuracy = 0;
+                                stDecodedGps.vAccuracy = 0;                                                                
+                            }
+
                             /* Update Global GPS Data */
                             SetGpsData(&stDecodedGps);
-
 
                             TickType_t xCurrentTick = xTaskGetTickCount();
                             

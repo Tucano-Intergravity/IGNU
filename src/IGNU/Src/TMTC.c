@@ -2,7 +2,7 @@
  * @file TMTC.c
  * @author Sebum Chun (sebum.chun@intergravity.tech)
  * @brief Telemetry & Telecommand Processing Source File (KISS, CSP, CCSDS)
- * @version 1.5.0 (Add: Periodic Test Data Transmission with Rad->Deg Conv)
+ * @version 1.6.0 (Add: TPVAW Processing)
  * @date 2026-01-09
  */
 
@@ -14,6 +14,7 @@
 #include "../Inc/ins_gps.h"
 #include "../../OPU/opu_task.h" // For SendToCom1
 #include "xil_printf.h"
+#include <math.h>
 
 /*==============================================================================
  * Define
@@ -27,9 +28,9 @@
 
 /* Math */
 #ifndef PI
-#define PI 3.14159265358979323846
+#define PI 3.14159265358979323846f
 #endif
-#define RAD_TO_DEG  (180.0 / PI)
+#define RAD_TO_DEG  (180.0f / PI)
 
 /*==============================================================================
  * Type Definition
@@ -60,7 +61,7 @@ static void SendCcsdsTm(UInt8 ucSvc, UInt8 ucSub, UInt8 *pData, UInt32 uiDataLen
 static void ProcTestStart(void);
 static void ProcTestStop(void);
 static void ProcSetTestParam(void);
-static void ProcSaveTpvaw(void);
+static void ProcSaveTpvaw(UInt8 *pData, UInt32 uiLen);
 static void ProcReqTestData(UInt8 ucType);
 static void ProcHkReq(void);
 static void ProcFuncExec(void);
@@ -339,6 +340,11 @@ static void CcsdsReceive(UInt8 *pCcsdsPacket, UInt32 uiLen)
     UInt8 *pSecHeader = &pCcsdsPacket[CCSDS_PRI_HEADER_SIZE];
     UInt8 ucServiceId = pSecHeader[0];
     UInt8 ucSubtypeId = pSecHeader[1];
+    
+    /* Calculate Payload (User Data) Start Address and Length */
+    /* Header (10 bytes) + Data */
+    UInt8 *pUserData = &pCcsdsPacket[CCSDS_PRI_HEADER_SIZE + CCSDS_TC_SEC_HEADER_SIZE];
+    UInt32 uiUserDataLen = uiLen - (CCSDS_PRI_HEADER_SIZE + CCSDS_TC_SEC_HEADER_SIZE);
 
     xil_printf("[CCSDS] APID:0x%X Svc:%d Sub:%d\r\n", usApid, ucServiceId, ucSubtypeId);
 
@@ -349,7 +355,7 @@ static void CcsdsReceive(UInt8 *pCcsdsPacket, UInt32 uiLen)
         if (ucSubtypeId == PUS_SUB_TEST_START) ProcTestStart();
         else if (ucSubtypeId == PUS_SUB_TEST_STOP) ProcTestStop();
         else if (ucSubtypeId == PUS_SUB_TEST_SET_PARAM) ProcSetTestParam();
-        else if (ucSubtypeId == PUS_SUB_TEST_SEND_TPVAW) ProcSaveTpvaw();
+        else if (ucSubtypeId == PUS_SUB_TEST_SEND_TPVAW) ProcSaveTpvaw(pUserData, uiUserDataLen);
         else if (ucSubtypeId >= PUS_SUB_TEST_DATA_MIN && ucSubtypeId <= PUS_SUB_TEST_DATA_MAX) ProcReqTestData(ucSubtypeId);
         else {
             xil_printf("[CCSDS] Unknown Subtype %d for Svc 1\r\n", ucSubtypeId);
@@ -389,10 +395,72 @@ static void ProcSetTestParam(void) {
     xil_printf("[CMD] Set Param\r\n");
     SendResponse(PUS_SVC_TEST, PUS_SUB_TEST_SET_PARAM, TM_ACK_VALID);
 }
-static void ProcSaveTpvaw(void) {
-    xil_printf("[CMD] TPVAW\r\n");
+
+/**
+ * @brief Handle TPVAW Data (Pus Service 1, Subtype 5)
+ * Payload Size: 108 Bytes
+ * Includes Quaternion to Euler Angle (Deg) Conversion for Debug
+ */
+static void ProcSaveTpvaw(UInt8 *pData, UInt32 uiLen) 
+{
+    xil_printf("[CMD] TPVAW (Len:%d)\r\n", uiLen);
+
+    if (uiLen != (sizeof(TpvawData_t) + 2)) {
+        xil_printf("[TPVAW] Error: Invalid Length %d (Expected %d)\r\n", uiLen, sizeof(TpvawData_t) + 2);
+        SendResponse(PUS_SVC_TEST, PUS_SUB_TEST_SEND_TPVAW, TM_ACK_INVALID);
+        return;
+    }
+
+    TpvawData_t stTpvaw;
+    /* Safe Copy using memcpy to prevent Unaligned Access Faults */
+    memcpy(&stTpvaw, pData, sizeof(TpvawData_t));
+
+    /* Verify Data (Print some values) */
+    /* Time & Pos */
+    xil_printf("[TPVAW] Time1: ");
+    PrintDouble(stTpvaw.timestamp1);
+    xil_printf(" PosX: ");
+    PrintDouble(stTpvaw.posX);
+    xil_printf("\r\n");
+
+    /* Quaternion to Euler Conversion (Deg) */
+    /* Assuming q4 is scalar (w), q1,q2,q3 are vector (x,y,z) */
+    float q1 = stTpvaw.q1; // x
+    float q2 = stTpvaw.q2; // y
+    float q3 = stTpvaw.q3; // z
+    float q4 = stTpvaw.q4; // w
+
+    /* Roll (x-axis rotation) */
+    float sinr_cosp = 2 * (q4 * q1 + q2 * q3);
+    float cosr_cosp = 1 - 2 * (q1 * q1 + q2 * q2);
+    float roll = atan2(sinr_cosp, cosr_cosp) * RAD_TO_DEG;
+
+    /* Pitch (y-axis rotation) */
+    float sinp = 2 * (q4 * q2 - q3 * q1);
+    float pitch;
+    if (fabs(sinp) >= 1)
+        pitch = copysign(PI / 2, sinp) * RAD_TO_DEG; // Use 90 degrees if out of range
+    else
+        pitch = asin(sinp) * RAD_TO_DEG;
+
+    /* Yaw (z-axis rotation) */
+    float siny_cosp = 2 * (q4 * q3 + q1 * q2);
+    float cosy_cosp = 1 - 2 * (q2 * q2 + q3 * q3);
+    float yaw = atan2(siny_cosp, cosy_cosp) * RAD_TO_DEG;
+
+    xil_printf("[TPVAW] Attitude(Deg): Roll=");
+    PrintFloat(roll);
+    xil_printf(" Pitch=");
+    PrintFloat(pitch);
+    xil_printf(" Yaw=");
+    PrintFloat(yaw);
+    xil_printf("\r\n");
+
+    /* TODO: Save or Process TPVAW Data here */
+
     SendResponse(PUS_SVC_TEST, PUS_SUB_TEST_SEND_TPVAW, TM_ACK_VALID);
 }
+
 static void ProcFuncExec(void) {
     xil_printf("[CMD] Func Exec\r\n");
     SendResponse(PUS_SVC_FUNCTION, PUS_SUB_FUNC_EXEC, TM_ACK_VALID);
@@ -413,20 +481,42 @@ static void ProcHkReq(void) {
     
     PayloadStatus_t stStatus;
     memset(&stStatus, 0, sizeof(PayloadStatus_t));
-
-    /* Mock Data Filling */
-    stStatus.boardTemp = 255; // 25.5 C
     
-    /* Reflect Current State */
+    GpsData_t stGpsData;
+    ImuData_t stImuData;
+    
+    /* 1. Get GPS Error */
+    GetGpsData(&stGpsData);
+    stStatus.gpsStatus = stGpsData.error;
+
+    /* 2. Get IMU Status (Check update within 1s) */
+    UInt32 uiNow = xTaskGetTickCount();
+    UInt32 uiLastImu = GetImuLastTick();
+    /* Assuming tick is 1ms or close (FreeRTOS default) */
+    /* Check for wrap-around or just simple diff */
+    if ((uiNow - uiLastImu) <= pdMS_TO_TICKS(1000)) {
+        stStatus.imuStatus = 0; // Normal
+    } else {
+        stStatus.imuStatus = 1; // Error (Timeout)
+    }
+
+    /* 3. Board Temp (Use IMU Gyro X-Axis Temperature) */
+    GetImuData(&stImuData);
+    /* Convert Float Temp to SInt16 with 0.1 degC unit (e.g. 25.5 C -> 255) */
+    stStatus.boardTemp = (SInt16)(stImuData.fTemp * 10.0f); 
+    
+    xil_printf("[HK] Temp: %d (Float: ", stStatus.boardTemp);
+    PrintFloat(stImuData.fTemp);
+    xil_printf(")\r\n"); 
+    
+    /* 4. Payload Status */
     if (GetIgnuState() == IGNU_STATE_RUN) {
         stStatus.payloadStatus = 1; // Testing
     } else {
         stStatus.payloadStatus = 0; // Idle
     }
     
-    stStatus.imuStatus = 0;
-    stStatus.gpsStatus = 0;
-    stStatus.gpsTrackStatus = 0;
+    stStatus.gpsTrackStatus = 0; // TODO: Map GPS mode if needed
 
     /* Svc 5, Sub 1, Data 8 bytes */
     SendCcsdsTm(PUS_SVC_HK, 1, (UInt8*)&stStatus, sizeof(PayloadStatus_t));

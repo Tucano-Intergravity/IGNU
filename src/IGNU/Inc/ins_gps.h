@@ -107,6 +107,7 @@ typedef struct {
     float fAccX;  // g
     float fAccY;
     float fAccZ;
+    float fTemp;  // Temp (Celsius) - Added
     UInt8 ucCounter;
 } ImuData_t;
 
@@ -116,9 +117,11 @@ typedef struct {
 /* IMU Functions */
 void ProcessImuPacket(UInt8 *pRawData, ImuData_t *pOutput);
 float ConvertRaw24(UInt8 *pRaw, float fScale);
+float GetImuGyroTempX(const UInt8 *pData); /* Added */
 void PrintFloat(float val);
 void SetImuData(ImuData_t *pData);
 void GetImuData(ImuData_t *pData);
+UInt32 GetImuLastTick(void); /* Added for Status Check */
 
 /* GPS Functions */
 /* 

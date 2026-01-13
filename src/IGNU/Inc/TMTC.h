@@ -2,7 +2,7 @@
  * @file TMTC.h
  * @author Sebum Chun (sebum.chun@intergravity.tech)
  * @brief Telemetry & Telecommand Processing Header
- * @version 1.5.0 (Fix: Use __attribute__((packed)) for Safe ICD Compliance)
+ * @version 1.6.0 (Add: TPVAW Data Structure and Handling)
  * @date 2026-01-09
  */
 
@@ -96,53 +96,83 @@ typedef struct __attribute__((packed)) {
     // _reserved2 removed
 } PayloadStatus_t;
 
-
 /* ============================================================================
  * 6.2.2 Test Data Telemetry (Reply Test Data)
- * Service: 1, Subtype: 10
- * Total Size: 100 Bytes (Modified for Alignment)
+ * Total Size: 100 Bytes (79 Data + 1 Align + 20 Reserved)
  * ============================================================================ */
-typedef struct {
+typedef struct __attribute__((packed)) {
     /* GPS Time Information */
-    UInt32 gpsWeek;         // Offset: 0, 32 bits (Modified from 16 bits)
-    UInt32 gpsTime;         // Offset: 4, 32 bits (Unit: sec, Little Endian)
+    UInt32 gpsWeek;         // 4 bytes
+    UInt32 gpsTime;         // 4 bytes
 
-    /* Position (8-byte aligned) */
-    double   lat;             // Offset: 8,  64 bits (Unit: degree, Little Endian)
-    double   lon;             // Offset: 16, 64 bits (Unit: degree, Little Endian)
+    /* Position */
+    double   lat;             // 8 bytes
+    double   lon;             // 8 bytes
+    float    alt;             // 4 bytes (ICD says 32bit float)
+    
+    /* Velocity */
+    float    velN;            // 4 bytes
+    float    velE;            // 4 bytes
+    float    velU;            // 4 bytes
 
-    /* Altitude & Velocity */
-    float    alt;             // Offset: 24, 32 bits (Unit: m, Little Endian)
-    float    velN;            // Offset: 28, 32 bits (Unit: m/s, Little Endian)
-    float    velE;            // Offset: 32, 32 bits (Unit: m/s, Little Endian)
-    float    velU;            // Offset: 36, 32 bits (Unit: m/s, Little Endian)
-
-    /* Status & Padding */
-    UInt8  mode;            // Offset: 40, 8 bits (GPS PVT mode)
-    UInt8  error;           // Offset: 41, 8 bits (GPS PVT error)
-    UInt8  NrSV;            // Offset: 42, 8 bits (GPS observable satellite)
-    UInt8  _reserved_align; // Offset: 43, 8 bits (Padding for 4-byte alignment)
+    /* Status */
+    UInt8  mode;            // 1 byte
+    UInt8  error;           // 1 byte
+    UInt8  NrSV;            // 1 byte
+    UInt8  _reserved_align; // 1 byte (Restored)
 
     /* IMU Data (Gyro) */
-    float    meanGyroX;       // Offset: 44, 32 bits (Unit: degree/s, Little Endian)
-    float    meanGyroY;       // Offset: 48, 32 bits (Unit: degree/s, Little Endian)
-    float    meanGyroZ;       // Offset: 52, 32 bits (Unit: degree/s, Little Endian)
+    float    meanGyroX;       // 4 bytes
+    float    meanGyroY;       // 4 bytes
+    float    meanGyroZ;       // 4 bytes
 
     /* IMU Data (Accel) */
-    float    meanAccX;        // Offset: 56, 32 bits (Unit: m/s^2, Little Endian)
-    float    meanAccY;        // Offset: 60, 32 bits (Unit: m/s^2, Little Endian)
-    float    meanAccZ;        // Offset: 64, 32 bits (Unit: m/s^2, Little Endian)
+    float    meanAccX;        // 4 bytes
+    float    meanAccY;        // 4 bytes
+    float    meanAccZ;        // 4 bytes
 
     /* Attitude */
-    float    roll;            // Offset: 68, 32 bits (Unit: degree, Little Endian)
-    float    pitch;           // Offset: 72, 32 bits (Unit: degree, Little Endian)
-    float    yaw;             // Offset: 76, 32 bits (Unit: degree, Little Endian)
+    float    roll;            // 4 bytes
+    float    pitch;           // 4 bytes
+    float    yaw;             // 4 bytes
 
     /* Reserved Area */
-    UInt32 reserved[5];     // Offset: 80 ~ 99, 5 * 32 bits
+    UInt32 reserved[5];     // 20 bytes (Restored)
 } TestData_t;
 
+/* ============================================================================
+ * TPVAW Data Structure (Received from PDHS)
+ * Total Size: 108 Bytes (Based on main.py struct format)
+ * Format: '<ddddddddiiiiffffiii' (Little Endian)
+ * ============================================================================ */
+typedef struct __attribute__((packed)) {
+    /* 8 x Double (64-bit) */
+    double timestamp1;  // Time1
+    double timestamp2;  // Time2
+    double posX;
+    double posY;
+    double posZ;
+    double velX;
+    double velY;
+    double velZ;
 
+    /* 4 x Int (32-bit) - Flags/Status */
+    SInt32 status1;
+    SInt32 status2;
+    SInt32 status3;
+    SInt32 status4;
+
+    /* 4 x Float (32-bit) - Quaternions */
+    float q1;
+    float q2;
+    float q3;
+    float q4;
+
+    /* 3 x Int (32-bit) - Reserved */
+    SInt32 reserved1;
+    SInt32 reserved2;
+    SInt32 reserved3;
+} TpvawData_t;
 
 /*==============================================================================
  * Global Function Declarations

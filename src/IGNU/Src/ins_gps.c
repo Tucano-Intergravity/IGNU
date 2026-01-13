@@ -16,6 +16,7 @@
  *============================================================================*/
 static ImuData_t stGlobalImuData;
 static GpsData_t stGlobalGpsData;
+static UInt32 uiLastImuUpdateTick = 0; /* Timestamp of last IMU update */
 
 /*==============================================================================
  * Functions
@@ -25,6 +26,7 @@ void SetImuData(ImuData_t *pData)
 {
     if (pData) {
         memcpy(&stGlobalImuData, pData, sizeof(ImuData_t));
+        uiLastImuUpdateTick = xTaskGetTickCount(); /* Update Timestamp */
     }
 }
 
@@ -33,6 +35,11 @@ void GetImuData(ImuData_t *pData)
     if (pData) {
         memcpy(pData, &stGlobalImuData, sizeof(ImuData_t));
     }
+}
+
+UInt32 GetImuLastTick(void)
+{
+    return uiLastImuUpdateTick;
 }
 
 void SetGpsData(GpsData_t *pData)
@@ -68,6 +75,20 @@ float ConvertRaw24(UInt8 *pRaw, float fScale)
 }
 
 /**
+ * @brief Parse X-axis Gyro Temperature
+ * Formula: ( (T1 * 2^8) + T2 - (Tb15 * 2^16) ) / 2^8
+ * Equivalent to: (float)((int16_t)Raw) / 256.0f
+ */
+float GetImuGyroTempX(const UInt8 *pData) {
+    /* T1: pData[21], T2: pData[22] */
+    /* Combine to 16-bit signed integer (Big Endian) */
+    SInt16 sRawTemp = (SInt16)((pData[21] << 8) | pData[22]);
+    
+    /* Formula: Raw / 256.0 */
+    return (float)sRawTemp / 256.0f;
+}
+
+/**
  * @brief Process Raw IMU Packet (42 Bytes)
  */
 void ProcessImuPacket(UInt8 *pRawData, ImuData_t *pOutput)
@@ -86,6 +107,9 @@ void ProcessImuPacket(UInt8 *pRawData, ImuData_t *pOutput)
     pOutput->fAccX = ConvertRaw24(&pRawData[11], ACCEL_SCALE_FACTOR);
     pOutput->fAccY = ConvertRaw24(&pRawData[14], ACCEL_SCALE_FACTOR);
     pOutput->fAccZ = ConvertRaw24(&pRawData[17], ACCEL_SCALE_FACTOR);
+
+    /* Temperature Parsing (Offset 21, 22) */
+    pOutput->fTemp = GetImuGyroTempX(pRawData);
 
     /* Counter (Offset 35) */
     pOutput->ucCounter = pRawData[35];
