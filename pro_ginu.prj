@@ -4,8 +4,9 @@
     <configBuildOptions xsi:type="sdkproject:SdkOptions"/>
     <lastBuildOptions xsi:type="sdkproject:SdkOptions"/>
   </configuration>
-  <configuration name="Release" id="xilinx.gnu.armv7.exe.release.265065651" dirty="true">
+  <configuration name="Release" id="xilinx.gnu.armv7.exe.release.265065651">
     <configBuildOptions xsi:type="sdkproject:SdkOptions"/>
+    <lastBuildOptions xsi:type="sdkproject:SdkOptions"/>
   </configuration>
   <template appTemplateName="freertos_lwip_udp_perf_server" hasBspSettings="true"/>
 </sdkproject:SdkProject>

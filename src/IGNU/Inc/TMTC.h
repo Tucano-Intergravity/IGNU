@@ -24,8 +24,8 @@
 /* CSP Definitions */
 #define CSP_HEADER_SIZE 4
 #define CSP_CRC32_SIZE  4
-#define CSP_MY_ADDR     19   // IGNU Address (Page 13)
-#define CSP_PDHS_ADDR   6    // PDHS Address
+#define CSP_MY_ADDR     6//19   // IGNU Address (Page 13)
+#define CSP_PDHS_ADDR   19//6    // PDHS Address
 
 /* CSP Port Definitions (ICD Table 12) */
 #define CSP_PORT_CMD_RX     10   // RX: Standard Command Service
