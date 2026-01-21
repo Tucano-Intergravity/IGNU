@@ -65,7 +65,7 @@ static void ProcSaveTpvaw(UInt8 *pData, UInt32 uiLen);
 static void ProcReqTestData(UInt8 ucType);
 static void ProcHkReq(void);
 static void ProcFuncExec(void);
-static void ProcPing(void);
+static void ProcPing(UInt8 *pUserData, UInt32 uiUserDataLen);
 
 /*==============================================================================
  * Functions
@@ -205,10 +205,9 @@ SInt32 CspSend(UInt8 dest, UInt8 dport, UInt8 *pData, UInt32 uiLen)
     uiPktLen += uiLen;
 
     /* 3. CRC32 */
-    /* Checksum: Calculate over Header + Payload (Standard CSP) */
-    /* If PDHS expects Payload Only, uncomment the next line and comment out the standard one */
-    // UInt32 uiCrc = Crc32Check(&ucRawPkt[CSP_HEADER_SIZE], uiLen); // Payload Only
-    UInt32 uiCrc = Crc32Check(ucRawPkt, uiPktLen); // Header + Payload
+    /* Checksum: Calculate over Payload Only (same as receive) */
+    UInt32 uiCrc = Crc32Check(&ucRawPkt[CSP_HEADER_SIZE], uiLen); // Payload Only
+    // UInt32 uiCrc = Crc32Check(ucRawPkt, uiPktLen); // Header + Payload (Standard CSP)
 
     ucRawPkt[uiPktLen++] = (uiCrc >> 24) & 0xFF;
     ucRawPkt[uiPktLen++] = (uiCrc >> 16) & 0xFF;
@@ -237,7 +236,7 @@ static void SendCcsdsTm(UInt8 ucSvc, UInt8 ucSub, UInt8 *pData, UInt32 uiDataLen
 
     /* 1. Primary Header (6 Bytes) */
     /* Packet ID: Version(0) | Type(0=TM) | SecHdr(1) | APID(11) */
-    UInt16 usPacketId = 0x0800 | (CCSDS_APID_IGNU & 0x07FF);
+    UInt16 usPacketId = 0x0800 | (0x023B & 0x07FF); // APID fixed to 0x023B for PDHS
     ucBuffer[uiLen++] = (usPacketId >> 8) & 0xFF;
     ucBuffer[uiLen++] = usPacketId & 0xFF;
 
@@ -277,7 +276,9 @@ static void SendCcsdsTm(UInt8 ucSvc, UInt8 ucSub, UInt8 *pData, UInt32 uiDataLen
     ucBuffer[uiLen++] = usCrc & 0xFF;
 
     /* 5. Send via CSP */
-    CspSend(CSP_PDHS_ADDR, CSP_PORT_ASYNC_TX, ucBuffer, uiLen);
+    /* Test data (Svc 1, Sub 10) uses port 11 (async), others use port 10 (sync) */
+    UInt8 dport = ((ucSvc == PUS_SVC_TEST) && (ucSub == PUS_SUB_TEST_REQ_DATA)) ? CSP_PORT_ASYNC_TX : CSP_PORT_CMD_RX;
+    CspSend(CSP_PDHS_ADDR, dport, ucBuffer, uiLen);
 }
 
 /**
@@ -342,9 +343,9 @@ static void CcsdsReceive(UInt8 *pCcsdsPacket, UInt32 uiLen)
     UInt8 ucSubtypeId = pSecHeader[1];
     
     /* Calculate Payload (User Data) Start Address and Length */
-    /* Header (10 bytes) + Data */
+    /* Header (10 bytes) + Data + CRC-16 (2 bytes) */
     UInt8 *pUserData = &pCcsdsPacket[CCSDS_PRI_HEADER_SIZE + CCSDS_TC_SEC_HEADER_SIZE];
-    UInt32 uiUserDataLen = uiLen - (CCSDS_PRI_HEADER_SIZE + CCSDS_TC_SEC_HEADER_SIZE);
+    UInt32 uiUserDataLen = uiLen - (CCSDS_PRI_HEADER_SIZE + CCSDS_TC_SEC_HEADER_SIZE + 2); // -2 for CRC-16
 
     xil_printf("[CCSDS] APID:0x%X Svc:%d Sub:%d\r\n", usApid, ucServiceId, ucSubtypeId);
 
@@ -371,7 +372,7 @@ static void CcsdsReceive(UInt8 *pCcsdsPacket, UInt32 uiLen)
         else SendResponse(ucServiceId, ucSubtypeId, TM_ACK_INVALID);
         break;
     case PUS_SVC_DIAGNOSE:
-        if (ucSubtypeId == PUS_SUB_DIAG_PING) ProcPing();
+        if (ucSubtypeId == PUS_SUB_DIAG_PING) ProcPing(pUserData, uiUserDataLen);
         else SendResponse(ucServiceId, ucSubtypeId, TM_ACK_INVALID);
         break;
     default:
@@ -405,8 +406,8 @@ static void ProcSaveTpvaw(UInt8 *pData, UInt32 uiLen)
 {
     xil_printf("[CMD] TPVAW (Len:%d)\r\n", uiLen);
 
-    if (uiLen != (sizeof(TpvawData_t) + 2)) {
-        xil_printf("[TPVAW] Error: Invalid Length %d (Expected %d)\r\n", uiLen, sizeof(TpvawData_t) + 2);
+    if (uiLen != sizeof(TpvawData_t)) {
+        xil_printf("[TPVAW] Error: Invalid Length %d (Expected %d)\r\n", uiLen, sizeof(TpvawData_t));
         SendResponse(PUS_SVC_TEST, PUS_SUB_TEST_SEND_TPVAW, TM_ACK_INVALID);
         return;
     }
@@ -465,9 +466,10 @@ static void ProcFuncExec(void) {
     xil_printf("[CMD] Func Exec\r\n");
     SendResponse(PUS_SVC_FUNCTION, PUS_SUB_FUNC_EXEC, TM_ACK_VALID);
 }
-static void ProcPing(void) {
+static void ProcPing(UInt8 *pUserData, UInt32 uiUserDataLen) {
     xil_printf("[CMD] Ping\r\n");
-    SendResponse(PUS_SVC_DIAGNOSE, PUS_SUB_DIAG_PONG, TM_ACK_VALID);
+    /* Send pong with same user data as ping */
+    SendCcsdsTm(PUS_SVC_DIAGNOSE, PUS_SUB_DIAG_PONG, pUserData, uiUserDataLen);
 }
 
 static void ProcReqTestData(UInt8 ucType) {
